@@ -1,0 +1,76 @@
+name: tests
+
+# Runs the unit suite and the offline release gate on every push and pull
+# request. Read-only: no secrets, no publishing, actions pinned by commit.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.py }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, py: "3.8" }
+          - { os: windows-latest, py: "3.13" }
+          - { os: ubuntu-22.04, py: "3.8" }
+          - { os: ubuntu-latest, py: "3.13" }
+          - { os: macos-latest, py: "3.9" }
+          - { os: macos-latest, py: "3.13" }
+          - { os: macos-15-intel, py: "3.12" }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONIOENCODING: "utf-8"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: ${{ matrix.py }}
+
+      - name: Test dependencies (pinned by hash)
+        run: |
+          if python -c "import sys; sys.exit(sys.version_info < (3, 10))"; then
+            python -m pip install --require-hashes -r build/requirements-test.txt
+          else
+            python -m pip install --require-hashes -r build/requirements-test-legacy.txt
+          fi
+          if python -c "import sys; sys.exit(sys.version_info < (3, 9))"; then
+            python -m pip install --require-hashes -r requirements-backups.txt
+          fi
+
+      - name: Unit tests
+        run: python -m pytest scan -q -rs -p no:cacheprovider
+
+      - name: Release gate
+        run: |
+          if python -c "import sys; sys.exit(sys.version_info < (3, 9))"; then
+            python tools/release_check.py --e2e-only --require-backups --output-dir gate-out
+          else
+            python tools/release_check.py --e2e-only --output-dir gate-out
+          fi
+
+      - name: Generated files match the sources
+        if: matrix.os == 'ubuntu-latest'
+        run: python build/build.py --check
+
+      - name: Single-file build is reproducible
+        run: |
+          python build/bundle.py . first.py
+          python build/bundle.py . second.py
+          cmp first.py second.py
+          python -c "import hashlib; print('single file sha256', hashlib.sha256(open('first.py','rb').read()).hexdigest())"

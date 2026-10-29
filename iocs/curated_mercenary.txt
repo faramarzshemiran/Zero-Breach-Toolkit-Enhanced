@@ -1,0 +1,58 @@
+# Curated mercenary-spyware indicators not available in any machine-readable feed
+# as-of: 2026-10-25
+# ^ Curated date; the staleness reference for this file.
+# Licence: CC0 1.0 (as iocs/LICENSE.md). Indicators are facts; the citations below
+#   name the researchers who published them.
+# Method: every value was read out of the raw text of the cited report (not from a
+#   summary), and its ROLE is recorded from the report's own description.
+# Format: indicator <TAB> tier <TAB> confidence <TAB> source-tag <TAB> family
+#
+# Sources
+#   citizenlab-paragon-2025-03  The Citizen Lab, 'Virtue or Vice? A First Look at Paragon's
+#       Proliferating Spyware Operations' (2025-03-19).
+#       https://citizenlab.ca/research/a-first-look-at-paragons-proliferating-spyware-operations/
+#   citizenlab-paragon-2025-06  The Citizen Lab, 'Graphite Caught: First Forensic Confirmation of
+#       Paragon's iOS Mercenary Spyware Finds Journalists Targeted' (2025-06-12).
+#       https://citizenlab.ca/research/first-forensic-confirmation-of-paragons-ios-mercenary-spyware-finds-journalists-targeted/
+#
+# NOT included, deliberately:
+#   - customer-deployment IPs the report publishes only partially (e.g. 67.69.21.xxx);
+#   - certificate name 'forti.external-Sht_prd_2.com' (not a valid hostname: underscore);
+#   - BIGPRETZEL / SMALLPRETZEL: named forensic indicators whose values are not published.
+#
+#
+# --- Tier 1: victim-facing Graphite servers (devices are expected to contact these)
+# Server the journalist's iPhone contacted (Jan-Feb 2025, iOS 18.2.1); rented from EDIS Global; matched Paragon Fingerprint P1 until at least 2025-04-12. Links both cases to one operator.
+46.183.184.91	infrastructure-ip	primary	citizenlab-paragon-2025-06	Paragon Graphite
+# Tier 1 IP (Fingerprint P1) that also returned cert CN=forti.external-Staging-02.com, Jul-Sep 2023.
+84.110.122.27	infrastructure-ip	primary	citizenlab-paragon-2025-03	Paragon Graphite
+# Tier 1 IP (Fingerprint P1) that later returned cert CN=awake-wood.io.
+178.237.39.204	infrastructure-ip	primary	citizenlab-paragon-2025-03	Paragon Graphite
+# Certificate name seen on Tier 1 IP 178.237.39.204.
+awake-wood.io	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+# Certificate name seen on Tier 1 IP 84.110.122.27 (lower-cased).
+forti.external-staging-02.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+#
+# --- Tier 2: Paragon / customer premises (operator side). Ordinary devices are NOT expected
+#     to contact these; the names are certificate common names and may not resolve in DNS.
+#     Static IPs in Israel that returned Tier 2 certificates (Table 2):
+84.110.47.82	infrastructure-ip	primary	citizenlab-paragon-2025-03	Paragon Graphite
+84.110.47.83	infrastructure-ip	primary	citizenlab-paragon-2025-03	Paragon Graphite
+84.110.47.84	infrastructure-ip	primary	citizenlab-paragon-2025-03	Paragon Graphite
+84.110.47.85	infrastructure-ip	primary	citizenlab-paragon-2025-03	Paragon Graphite
+84.110.47.86	infrastructure-ip	primary	citizenlab-paragon-2025-03	Paragon Graphite
+# Tier 2 certificate names on the Israeli IPs (Table 2):
+forti.paraccess.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+modern-money.org	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+ancient-thing.it	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+#     Certificate names on suspected customer deployments (codename initial matches country):
+external-astra.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+internal-abba.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+external-cap.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+external-drt.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+forti.external-muki.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+external-cag.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+forti.external-sht.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+forti.external-shotgun3.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+forti.external-sht-prd-4.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite
+forti.internal-stg.com	infrastructure	primary	citizenlab-paragon-2025-03	Paragon Graphite

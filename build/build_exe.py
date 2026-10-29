@@ -1,0 +1,88 @@
+"""Build the double-click program for this platform.
+
+Windows: dist/zero-breach-toolkit.exe. macOS and Linux: dist/zero-breach-toolkit
+(a single executable that opens in a terminal). Each platform builds its own;
+the release workflow (.github/workflows/programs.yml) builds all of them on
+GitHub's machines from the tagged source.
+
+Packages the single-file build (dist/zero-breach-toolkit.py, made by
+build/bundle.py) with PyInstaller. Run with the pinned build environment:
+
+    build\\.venv\\Scripts\\python.exe build\\build_exe.py
+
+Choices, each for a reason:
+  --onefile   one download, nothing to unpack by hand.
+  --noupx     UPX-packed executables are a well-known cause of antivirus false
+              alarms; a security tool must not look like packed malware.
+  version     product name and version are stamped into the file so that every
+              build of a version carries identical metadata.
+The executable is NOT signed, here or anywhere. This project is anonymous and a
+code-signing certificate requires a named legal identity, so expect SmartScreen
+to warn and some antivirus products to object. PyInstaller output is also not
+byte-reproducible, unlike the single-file Python build. Running from source
+avoids both. See docs/VERIFYING.md.
+"""
+
+import os
+import re
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+SOURCE = os.path.join(ROOT, "dist", "zero-breach-toolkit.py")
+WORK = os.path.join(HERE, "pyinstaller")
+PRODUCT = "Zero Breach Toolkit"
+
+
+def version():
+    text = open(os.path.join(ROOT, "scan", "zbtriage", "__init__.py"), encoding="utf-8").read()
+    return re.search(r'__version__\s*=\s*"([^"]+)"', text).group(1)
+
+
+def version_file(ver):
+    nums = [int(x) for x in re.findall(r"\d+", ver)[:4]]
+    nums += [0] * (4 - len(nums))
+    tup = "({}, {}, {}, {})".format(*nums)
+    path = os.path.join(WORK, "version_info.txt")
+    os.makedirs(WORK, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("""VSVersionInfo(
+  ffi=FixedFileInfo(filevers={tup}, prodvers={tup}, mask=0x3f, flags=0x0, OS=0x40004,
+                    fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[
+    StringFileInfo([StringTable('040904B0', [
+      StringStruct('CompanyName', 'Zero Breach'),
+      StringStruct('FileDescription', '{product} - spyware indicator check'),
+      StringStruct('FileVersion', '{ver}'),
+      StringStruct('InternalName', 'zero-breach-toolkit'),
+      StringStruct('LegalCopyright', 'Apache License 2.0'),
+      StringStruct('OriginalFilename', 'zero-breach-toolkit.exe'),
+      StringStruct('ProductName', '{product}'),
+      StringStruct('ProductVersion', '{ver}')])]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])
+  ]
+)
+""".format(tup=tup, ver=ver, product=PRODUCT))
+    return path
+
+
+def main():
+    if not os.path.isfile(SOURCE):
+        sys.exit("missing {} - run build/bundle.py first".format(SOURCE))
+    ver = version()
+    cmd = [sys.executable, "-m", "PyInstaller", "--onefile", "--console", "--noupx",
+           "--clean", "--noconfirm", "--name", "zero-breach-toolkit",
+           "--distpath", os.path.join(ROOT, "dist"), "--workpath", WORK,
+           "--specpath", WORK, SOURCE]
+    if os.name == "nt":
+        # Windows shows these details under the file's Properties.
+        cmd[-1:-1] = ["--version-file", version_file(ver)]
+    print("building version", ver)
+    subprocess.run(cmd, check=True)
+    exe = os.path.join(ROOT, "dist", "zero-breach-toolkit" + (".exe" if os.name == "nt" else ""))
+    print("wrote {} ({:,} bytes)".format(exe, os.path.getsize(exe)))
+
+
+if __name__ == "__main__":
+    main()

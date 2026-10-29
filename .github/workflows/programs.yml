@@ -1,0 +1,119 @@
+name: programs
+
+# Builds the double-click programs (Windows, macOS Apple silicon and Intel,
+# Linux) on GitHub's machines from the tagged source, checks each one against
+# the single-file build with a harmless fixture, and records a public build
+# attestation for every file (verify with `gh attestation verify`). On a
+# published release the files are attached to it; a manual run only builds
+# them, for testing. Actions are pinned by commit; build tools by hash.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "tag or commit to build, for example v0.1.12"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, label: windows-x64, program: zero-breach-toolkit.exe }
+          - { os: macos-latest, label: macos-apple-silicon, program: zero-breach-toolkit }
+          - { os: macos-15-intel, label: macos-intel, program: zero-breach-toolkit }
+          - { os: ubuntu-22.04, label: linux-x64, program: zero-breach-toolkit }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      PYTHONNOUSERSITE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONIOENCODING: "utf-8"
+      REF: ${{ github.event.release.tag_name || inputs.ref }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Build tools (pinned by hash)
+        run: python -m pip install --require-hashes -r build/requirements-build.txt
+
+      - name: Build the program
+        run: |
+          python build/bundle.py . dist/zero-breach-toolkit.py
+          python build/build_exe.py
+          "dist/${{ matrix.program }}" --version
+
+      - name: Check it against the single-file build
+        run: python tools/program_smoke.py "dist/${{ matrix.program }}"
+
+      - name: Package
+        run: |
+          mkdir -p out
+          name="zero-breach-toolkit-${{ matrix.label }}"
+          case "${{ matrix.label }}" in
+            windows-*)
+              cp "dist/${{ matrix.program }}" "out/$name.exe" ;;
+            macos-*)
+              mkdir -p "pkg/$name"
+              cp "dist/${{ matrix.program }}" "pkg/$name/Zero Breach Toolkit"
+              cp build/program-readme-macos.txt "pkg/$name/HOW TO OPEN.txt"
+              (cd pkg && ditto -c -k --keepParent "$name" "../out/$name.zip") ;;
+            linux-*)
+              mkdir -p "pkg/$name"
+              cp "dist/${{ matrix.program }}" "pkg/$name/zero-breach-toolkit"
+              chmod 755 "pkg/$name/zero-breach-toolkit"
+              cp build/program-readme-linux.txt "pkg/$name/HOW TO OPEN.txt"
+              tar -C pkg -czf "out/$name.tar.gz" "$name" ;;
+          esac
+          ls -l out
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: out/*
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: program-${{ matrix.label }}
+          path: out/*
+          if-no-files-found: error
+
+  attach:
+    name: attach to release
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          pattern: program-*
+          merge-multiple: true
+          path: out
+      - name: Upload the programs to the release
+        run: |
+          ls -l out
+          gh release upload "$TAG" out/* --repo "$GITHUB_REPOSITORY" --clobber

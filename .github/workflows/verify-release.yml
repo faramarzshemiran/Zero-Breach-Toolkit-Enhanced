@@ -1,0 +1,67 @@
+name: verify-release
+
+# Rebuilds the single file from the release tag on a clean GitHub machine and
+# compares it with both the downloadable file and the SHA-256 in the release's
+# SHA256SUMS.txt, after checking both signatures against the pinned release key,
+# so a release can be checked without trusting the machine that built it.
+# Read-only: no secrets beyond the default token, nothing is published.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "release tag to verify, for example v0.1.6"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Rebuild from the tag
+        run: python build/bundle.py . rebuilt.py
+
+      - name: Check the published file, checksum and signatures
+        env:
+          RELEASE_KEY: C24EC92B12D6670A2516065F9B4D575499AFA53C
+        run: |
+          set -eu
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir published --pattern SHA256SUMS.txt --pattern SHA256SUMS.txt.asc --pattern zero-breach-toolkit.py --pattern zero-breach-toolkit.py.asc --pattern archivegenocide-signing-key.asc
+          # Signatures: only the pinned release key is trusted, whatever key
+          # file the release carries. The downloaded scanner is never run.
+          export GNUPGHOME="$(mktemp -d)"
+          gpg --batch --quiet --import published/archivegenocide-signing-key.asc
+          gpg --batch --with-colons --fingerprint | awk -F: '$1 == "fpr" {print $10}' > fingerprints
+          grep -qx "$RELEASE_KEY" fingerprints
+          for file in SHA256SUMS.txt zero-breach-toolkit.py; do
+            gpg --batch --status-fd 1 --verify "published/$file.asc" "published/$file" > status
+            grep -q " VALIDSIG $RELEASE_KEY " status
+          done
+          # Exactly one manifest entry for the scanner.
+          test "$(awk '$2 == "zero-breach-toolkit.py"' published/SHA256SUMS.txt | wc -l)" -eq 1
+          expected=$(awk '$2 == "zero-breach-toolkit.py" {print $1}' published/SHA256SUMS.txt)
+          rebuilt=$(sha256sum rebuilt.py | cut -d' ' -f1)
+          download=$(sha256sum published/zero-breach-toolkit.py | cut -d' ' -f1)
+          echo "signed checksum SHA-256: $expected"
+          echo "downloadable    SHA-256: $download"
+          echo "rebuilt         SHA-256: $rebuilt"
+          test -n "$expected"
+          test "$expected" = "$rebuilt"
+          test "$download" = "$rebuilt"
+          echo "The downloadable file is exactly what the tagged source builds, and both signatures are good."
